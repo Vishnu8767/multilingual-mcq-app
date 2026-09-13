@@ -19,12 +19,11 @@ def generate_mcqs(
     num_questions: int = 5,
     target_language: str = "Same as document",
     difficulty: str = "Medium",
-    focus_topic: str = ""  # NEW PARAMETER
+    focus_topic: str = ""
 ) -> QuizResponse:
     
     client = genai.Client(api_key=api_key)
 
-    # Dynamic instruction based on user choice
     topic_instruction = ""
     if focus_topic.strip():
         topic_instruction = f"CRITICAL: FOCUS EXCLUSIVELY ON THE TOPIC '{focus_topic}'. Ignore unrelated sections of the text."
@@ -59,3 +58,34 @@ def generate_mcqs(
     )
 
     return QuizResponse.model_validate_json(response.text)
+
+# --- NEW SUMMARIZATION FUNCTION ---
+def summarize_text(
+    context_text: str,
+    api_key: str,
+    target_language: str = "Same as document"
+) -> str:
+    client = genai.Client(api_key=api_key)
+
+    prompt = f"""
+    You are an expert multilingual AI assistant.
+    Provide a comprehensive, highly accurate summary of the following text.
+
+    CRITICAL RULES:
+    1. Output Language: {target_language}. If set to 'Same as document', write in the primary language of the input text. This must support all major Indian and Foreign languages.
+    2. Capture the main ideas, key arguments, and critical details.
+    3. Structure the summary with clear headings and bullet points for maximum readability.
+
+    Source Text:
+    \"\"\"{context_text[:15000]}\"\"\"
+    """
+
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.3, # Low temperature for accurate, factual summarization
+        ),
+    )
+    
+    return response.text

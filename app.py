@@ -3,20 +3,21 @@ import time
 from datetime import datetime
 import pandas as pd
 from extractor import extract_text_from_pdf
-from mcq_engine import generate_mcqs
+from mcq_engine import generate_mcqs, summarize_text
 import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="Advanced MCQ Generator", page_icon="🎓", layout="wide"
+    page_title="Advanced AI Toolkit", page_icon="🎓", layout="wide"
 )
 
-# --- Fetch API Key Secretly ---
 api_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 
 # --- Initialize Session States ---
 if "quiz_data" not in st.session_state:
     st.session_state.quiz_data = None
+if "summary_result" not in st.session_state:
+    st.session_state.summary_result = None
 if "quiz_history" not in st.session_state:
     st.session_state.quiz_history = []
 if "user_answers" not in st.session_state:
@@ -26,44 +27,65 @@ if "quiz_submitted" not in st.session_state:
 if "start_time" not in st.session_state:
     st.session_state.start_time = None
 
-st.title("🎓 Advanced Interactive MCQ Generator")
+st.title("🎓 Advanced AI Quiz & Summarization Toolkit")
 
-tab_quiz, tab_history = st.tabs(["📝 Generate & Take Quiz", "📊 Quiz History"])
+tab_quiz, tab_history = st.tabs(["📝 Document Processing", "📊 Quiz History"])
 
 with tab_quiz:
     with st.sidebar:
-        st.header("⚙️ Quiz Parameters")
-        num_questions = st.slider("Number of Questions", 3, 15, 5)
-        difficulty = st.selectbox(
-            "Difficulty Level", ["Easy", "Medium", "Hard"]
-        )
+        st.header("⚙️ Configuration")
         language_choice = st.selectbox(
-            "Output Language",
-            ["Same as document", "English", "Hindi (हिन्दी)", "Tamil (தமிழ்)"],
+            "Output Language (Applies to both Quiz & Summary)",
+            ["Same as document", "English", "Hindi (हिन्दी)", "Tamil (தமிழ்)", "Telugu (తెలుగు)", "Spanish (Español)"],
         )
+        
+        st.divider()
+        st.subheader("Quiz Parameters")
+        num_questions = st.slider("Number of Questions", 3, 15, 5)
+        difficulty = st.selectbox("Difficulty Level", ["Easy", "Medium", "Hard"])
         timer_mins = st.selectbox("Set Timer (Minutes)", [5, 10, 15, 30])
 
-    # Check if API Key exists
     if not api_key:
         st.error(
             "⚠️ API Key is missing! Please configure GEMINI_API_KEY in Streamlit Secrets."
         )
 
-    # File Upload
     uploaded_file = st.file_uploader(
         "Upload Course Material (PDF)", type=["pdf"]
     )
 
-    # Micro-Topic Selection UI
     focus_topic = ""
-    use_topic = st.checkbox("🔍 Focus on a specific micro-topic?")
+    use_topic = st.checkbox("🔍 Focus on a specific micro-topic? (Optional)")
     if use_topic:
         focus_topic = st.text_input(
             "Type the specific topic (e.g., 'Recurrence Relations', 'Heap Sort'):"
         )
 
     if uploaded_file and api_key:
-        if st.button("Generate Quiz", type="primary"):
+        # Create side-by-side buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            generate_quiz_btn = st.button("📝 Generate Quiz", type="primary", use_container_width=True)
+        with col2:
+            summarize_btn = st.button("📄 Summarize Text", type="secondary", use_container_width=True)
+
+        # Handle Summarization
+        if summarize_btn:
+            with st.spinner("Extracting text and generating comprehensive summary..."):
+                text = extract_text_from_pdf(uploaded_file)
+                if not text.strip():
+                    st.error("Could not extract readable text.")
+                else:
+                    try:
+                        summary = summarize_text(text, api_key, language_choice)
+                        st.session_state.summary_result = summary
+                        st.session_state.quiz_data = None # Clear quiz if exists
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        # Handle Quiz Generation
+        if generate_quiz_btn:
             with st.spinner("Extracting text and generating quiz..."):
                 text = extract_text_from_pdf(uploaded_file)
                 if not text.strip():
@@ -71,14 +93,10 @@ with tab_quiz:
                 else:
                     try:
                         quiz_data = generate_mcqs(
-                            text,
-                            api_key,
-                            num_questions,
-                            language_choice,
-                            difficulty,
-                            focus_topic,
+                            text, api_key, num_questions, language_choice, difficulty, focus_topic
                         )
                         st.session_state.quiz_data = quiz_data
+                        st.session_state.summary_result = None # Clear summary if exists
                         st.session_state.user_answers = {}
                         st.session_state.quiz_submitted = False
                         st.session_state.start_time = time.time()
@@ -87,11 +105,16 @@ with tab_quiz:
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-    # Interactive Quiz Display
+    # Display Summary Result
+    if st.session_state.summary_result:
+        st.info("### 📄 Document Summary")
+        st.markdown(st.session_state.summary_result)
+        st.divider()
+
+    # Display Interactive Quiz
     if st.session_state.quiz_data:
         quiz = st.session_state.quiz_data.quiz
 
-        # Visual Countdown Timer
         if not st.session_state.quiz_submitted:
             elapsed_seconds = int(time.time() - st.session_state.start_time)
             remaining_seconds = max(0, (timer_mins * 60) - elapsed_seconds)
@@ -136,7 +159,6 @@ with tab_quiz:
             )
             st.write("")
 
-        # Submit Action
         if not st.session_state.quiz_submitted:
             st.markdown("---")
             user_name = st.text_input("Enter your name to submit:")
@@ -179,7 +201,6 @@ with tab_quiz:
                 st.session_state.quiz_submitted = True
                 st.rerun()
 
-        # Results after submission
         if st.session_state.quiz_submitted:
             st.success(
                 f"### Quiz Completed! Your Score: {st.session_state.final_score} / {len(quiz)} {st.session_state.final_emoji}"
@@ -204,7 +225,6 @@ with tab_quiz:
                 st.session_state.quiz_submitted = False
                 st.rerun()
 
-# History Tab
 with tab_history:
     st.header("📊 User Quiz History")
     if not st.session_state.quiz_history:
