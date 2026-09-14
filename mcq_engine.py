@@ -199,7 +199,7 @@ def explain_algorithm_or_code(
     Target Language: {target_language}.
     """
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-1.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(temperature=0.2),
     )
