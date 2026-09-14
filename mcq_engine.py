@@ -13,40 +13,36 @@ class QuizResponse(BaseModel):
     detected_language: str = Field(description="Language detected from the document.")
     quiz: List[MCQItem]
 
+class FlashcardItem(BaseModel):
+    front: str = Field(description="The core concept, theorem, code snippet, or question.")
+    back: str = Field(description="The definition, complexity analysis, proof, or answer.")
+
+class FlashcardResponse(BaseModel):
+    flashcards: List[FlashcardItem]
+
 def generate_mcqs(
-    context_text: str,
-    api_key: str,
-    num_questions: int = 5,
-    target_language: str = "Same as document",
-    difficulty: str = "Medium",
-    focus_topic: str = ""
+    context_text: str, api_key: str, num_questions: int = 5,
+    target_language: str = "Same as document", difficulty: str = "Medium", focus_topic: str = ""
 ) -> QuizResponse:
     
     client = genai.Client(api_key=api_key)
-
-    topic_instruction = ""
-    if focus_topic.strip():
-        topic_instruction = f"CRITICAL: FOCUS EXCLUSIVELY ON THE TOPIC '{focus_topic}'. Ignore unrelated sections of the text."
-    else:
-        topic_instruction = "Generate questions covering the overall provided text comprehensively."
+    topic_instruction = f"CRITICAL: FOCUS EXCLUSIVELY ON THE TOPIC '{focus_topic}'." if focus_topic.strip() else "Generate questions covering the text."
 
     prompt = f"""
     You are an expert multilingual academic examiner.
-    Analyze the following text and generate {num_questions} high-quality Multiple Choice Questions (MCQs).
+    Analyze the text and generate {num_questions} Multiple Choice Questions (MCQs).
 
     {topic_instruction}
 
     CRITICAL RULES:
-    1. Language constraint: {target_language}.
-    2. Difficulty level: {difficulty}.
-    3. The 3 distractors (wrong answers) must be plausible and contextually relevant.
-    4. Ensure the correct answer is identical to one of the 4 elements in the 'options' list.
-    5. Do not hallucinate facts outside the provided text.
+    1. Language: {target_language}. Difficulty: {difficulty}.
+    2. Format all programming code snippets using Markdown code blocks.
+    3. Format all mathematical formulas, recurrence relations, and computational time complexities (e.g., O(n log n)) strictly using LaTeX notation.
+    4. Ensure the correct answer is exactly one of the 4 options.
 
     Source Text:
     \"\"\"{context_text[:12000]}\"\"\"
     """
-
     response = client.models.generate_content(
         model="gemini-3.6-flash",
         contents=prompt,
@@ -56,36 +52,47 @@ def generate_mcqs(
             temperature=0.3,
         ),
     )
-
     return QuizResponse.model_validate_json(response.text)
 
-# --- NEW SUMMARIZATION FUNCTION ---
-def summarize_text(
-    context_text: str,
-    api_key: str,
-    target_language: str = "Same as document"
-) -> str:
+def summarize_text(context_text: str, api_key: str, target_language: str = "Same as document") -> str:
     client = genai.Client(api_key=api_key)
-
     prompt = f"""
-    You are an expert multilingual AI assistant.
     Provide a comprehensive, highly accurate summary of the following text.
-
+    
     CRITICAL RULES:
-    1. Output Language: {target_language}. If set to 'Same as document', write in the primary language of the input text. This must support all major Indian and Foreign languages.
-    2. Capture the main ideas, key arguments, and critical details.
-    3. Structure the summary with clear headings and bullet points for maximum readability.
+    1. Output Language: {target_language}.
+    2. Format all programming code snippets using standard Markdown code blocks.
+    3. Format all mathematical formulas, proofs, and time complexities using LaTeX notation.
+    4. Use clear headings and bullet points.
 
     Source Text:
     \"\"\"{context_text[:15000]}\"\"\"
     """
-
     response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt,
+        model="gemini-3.6-flash", contents=prompt,
+        config=types.GenerateContentConfig(temperature=0.3)
+    )
+    return response.text
+
+def generate_flashcards_from_text(context_text: str, api_key: str, target_language: str) -> FlashcardResponse:
+    client = genai.Client(api_key=api_key)
+    prompt = f"""
+    Extract the most critical definitions, code snippets, algorithms, and formulas from the text and create high-yield flashcards.
+    
+    CRITICAL RULES:
+    1. Language: {target_language}.
+    2. Format all mathematical notation in LaTeX and code in Markdown.
+    3. The 'front' should be a clear prompt/concept, and the 'back' should be the answer/definition.
+
+    Source Text:
+    \"\"\"{context_text[:12000]}\"\"\"
+    """
+    response = client.models.generate_content(
+        model="gemini-3.6-flash", contents=prompt,
         config=types.GenerateContentConfig(
-            temperature=0.3, # Low temperature for accurate, factual summarization
+            response_mime_type="application/json",
+            response_schema=FlashcardResponse,
+            temperature=0.3,
         ),
     )
-    
-    return response.text
+    return FlashcardResponse.model_validate_json(response.text)
