@@ -37,14 +37,14 @@ def generate_mcqs(
     CRITICAL RULES:
     1. Language: {target_language}. Difficulty: {difficulty}.
     2. Format all programming code snippets using Markdown code blocks.
-    3. Format all mathematical formulas, recurrence relations, and computational time complexities (e.g., O(n log n)) strictly using LaTeX notation.
+    3. Format all mathematical formulas, recurrence relations, and computational time complexities (e.g., $O(n \log n)$) strictly using LaTeX notation.
     4. Ensure the correct answer is exactly one of the 4 options.
 
     Source Text:
     \"\"\"{context_text[:12000]}\"\"\"
     """
     response = client.models.generate_content(
-        model="gemini-3.6-flash",
+        model="gemini-1.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -69,7 +69,7 @@ def summarize_text(context_text: str, api_key: str, target_language: str = "Same
     \"\"\"{context_text[:15000]}\"\"\"
     """
     response = client.models.generate_content(
-        model="gemini-3.6-flash", contents=prompt,
+        model="gemini-1.5-flash", contents=prompt,
         config=types.GenerateContentConfig(temperature=0.3)
     )
     return response.text
@@ -88,7 +88,7 @@ def generate_flashcards_from_text(context_text: str, api_key: str, target_langua
     \"\"\"{context_text[:12000]}\"\"\"
     """
     response = client.models.generate_content(
-        model="gemini-3.6-flash", contents=prompt,
+        model="gemini-1.5-flash", contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=FlashcardResponse,
@@ -96,3 +96,34 @@ def generate_flashcards_from_text(context_text: str, api_key: str, target_langua
         ),
     )
     return FlashcardResponse.model_validate_json(response.text)
+
+# --- NEW: CHAT WITH PDF ENGINE ---
+def chat_with_pdf(context_text: str, user_query: str, chat_history: list, api_key: str, target_language: str) -> str:
+    client = genai.Client(api_key=api_key)
+    
+    # Format the last few messages for context
+    history_str = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in chat_history[-4:]])
+    
+    prompt = f"""
+    You are an expert academic tutor. Answer the student's question strictly using the provided document text.
+    
+    Document Context:
+    \"\"\"{context_text[:15000]}\"\"\"
+
+    Recent Chat History:
+    {history_str}
+
+    Student Query: {user_query}
+    Target Language: {target_language}
+
+    Guidelines:
+    - Base your answer ONLY on the provided context. If the answer isn't in the document, politely say so.
+    - Format all math formulas in LaTeX and algorithms in Markdown.
+    - Be clear, concise, and helpful.
+    """
+    response = client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(temperature=0.4),
+    )
+    return response.text
