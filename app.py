@@ -41,37 +41,57 @@ tab_quiz, tab_history = st.tabs(["📝 Document Processing", "📊 Quiz History"
 
 # --- 3. MAIN APPLICATION LOGIC ---
 with tab_quiz:
-    uploaded_file = st.file_uploader("Upload Course Material (PDF, DOCX, PPTX, TXT)", type=["pdf", "docx", "pptx", "txt"])
+    # --- NEW: Input Method Toggle ---
+    input_method = st.radio("Choose Input Method:", ["Upload Document (PDF, Word, PPT)", "Type / Paste Text Directly"], horizontal=True)
+    
+    uploaded_file = None
+    pasted_text = ""
+    
+    if input_method == "Upload Document (PDF, Word, PPT)":
+        uploaded_file = st.file_uploader("Upload Course Material", type=["pdf", "docx", "pptx"])
+    else:
+        pasted_text = st.text_area("Type or paste your notes/text here:", height=200, placeholder="Paste your study material here...")
+
     focus_topic = st.text_input("🔍 Focus on a specific micro-topic? (Optional)") if st.checkbox("Focus Topic") else ""
 
-    if uploaded_file and api_key:
+    # Check if we have either a file OR typed text ready
+    if (uploaded_file or pasted_text.strip()) and api_key:
         col1, col2 = st.columns(2)
         
+        # Helper function to get text based on user choice
+        def get_source_text():
+            if input_method == "Upload Document (PDF, Word, PPT)" and uploaded_file:
+                return extract_text(uploaded_file)
+            return pasted_text
+
         # Logic: Summarization
         if col2.button("📄 Summarize Text", use_container_width=True):
             with st.spinner("Generating summary..."):
-                text = extract_text(uploaded_file)
+                text = get_source_text()
                 if text.strip():
                     st.session_state.summary_result = summarize_text(text, api_key, language_choice)
                     st.session_state.update({"summary_flashcards": None, "quiz_data": None})
                     st.rerun()
                 else:
-                    st.error("Could not extract readable text from this file.")
+                    st.error("No readable text found. Please check your file or input.")
 
         # Logic: Quiz Generation
         if col1.button("📝 Generate Quiz", type="primary", use_container_width=True):
             with st.spinner("Generating quiz..."):
-                text = extract_text(uploaded_file)
+                text = get_source_text()
                 if text.strip():
+                    # Set a display name for the history tab
+                    display_name = uploaded_file.name if input_method == "Upload Document (PDF, Word, PPT)" else "Direct Text Input"
+                    
                     st.session_state.quiz_data = generate_mcqs(text, api_key, num_questions, language_choice, difficulty, focus_topic)
                     st.session_state.update({
                         "summary_result": None, "user_answers": {}, 
                         "quiz_submitted": False, "start_time": time.time(), 
-                        "file_name": uploaded_file.name
+                        "file_name": display_name
                     })
                     st.rerun()
                 else:
-                    st.error("Could not extract readable text from this file.")
+                    st.error("No readable text found. Please check your file or input.")
 
     # --- 4. USER INTERFACE RENDERING ---
     if st.session_state.summary_result:
