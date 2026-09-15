@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 from extractor import extract_text
-from mcq_engine import generate_mcqs, summarize_text, generate_flashcards_from_text
+from mcq_engine import generate_mcqs, summarize_text
 
 # --- 1. SETUP & CONFIGURATION ---
 st.set_page_config(page_title="Advanced AI Toolkit", page_icon="🎓", layout="wide")
@@ -14,7 +14,7 @@ api_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", ""))
 def initialize_session_state():
     """Sets up all default variables neatly in one place."""
     defaults = {
-        "quiz_data": None, "summary_result": None, "summary_flashcards": None,
+        "quiz_data": None, "summary_result": None,
         "quiz_history": [], "user_answers": {}, "quiz_submitted": False,
         "start_time": None, "file_name": ""
     }
@@ -41,7 +41,7 @@ tab_quiz, tab_history = st.tabs(["📝 Document Processing", "📊 Quiz History"
 
 # --- 3. MAIN APPLICATION LOGIC ---
 with tab_quiz:
-    # --- NEW: Input Method Toggle ---
+    # --- Input Method Toggle ---
     input_method = st.radio("Choose Input Method:", ["Upload Document (PDF, Word, PPT)", "Type / Paste Text Directly"], horizontal=True)
     
     uploaded_file = None
@@ -70,7 +70,7 @@ with tab_quiz:
                 text = get_source_text()
                 if text.strip():
                     st.session_state.summary_result = summarize_text(text, api_key, language_choice)
-                    st.session_state.update({"summary_flashcards": None, "quiz_data": None})
+                    st.session_state.update({"quiz_data": None})
                     st.rerun()
                 else:
                     st.error("No readable text found. Please check your file or input.")
@@ -97,16 +97,6 @@ with tab_quiz:
     if st.session_state.summary_result:
         st.info("### 📄 Document Summary")
         st.markdown(st.session_state.summary_result)
-        
-        if st.button("Create Anki/Quizlet Flashcards"):
-            with st.spinner("Extracting flashcards..."):
-                st.session_state.summary_flashcards = generate_flashcards_from_text(st.session_state.summary_result, api_key, language_choice).flashcards
-                st.rerun()
-                
-        if st.session_state.summary_flashcards:
-            df_fc = pd.DataFrame([{"Front": fc.front, "Back": fc.back} for fc in st.session_state.summary_flashcards])
-            st.dataframe(df_fc, use_container_width=True)
-            st.download_button("📥 Download Flashcards", df_fc.to_csv(index=False).encode("utf-8"), "summary_flashcards.csv", "text/csv")
 
     elif st.session_state.quiz_data:
         quiz = st.session_state.quiz_data.quiz
@@ -137,8 +127,6 @@ with tab_quiz:
 
         if st.session_state.quiz_submitted:
             st.success(f"### Score: {st.session_state.final_score} / {len(quiz)}")
-            df_quiz_fc = pd.DataFrame([{"Front": f"{q.question}\n\n" + "\n".join(q.options), "Back": f"{q.correct_answer}\n\nExplanation: {q.explanation}"} for q in quiz])
-            st.download_button("📥 Download MCQ Flashcards", df_quiz_fc.to_csv(index=False).encode("utf-8"), "mcq_flashcards.csv", "text/csv")
             
             if st.button("Start New Quiz"):
                 st.session_state.update({"quiz_data": None, "quiz_submitted": False})
