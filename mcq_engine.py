@@ -36,8 +36,9 @@ def generate_mcqs(
     Source Text:
     \"\"\"{context_text}\"\"\"
     """
+    
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-3.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -61,8 +62,10 @@ def summarize_text(context_text: str, api_key: str, target_language: str = "Same
     Source Text:
     \"\"\"{context_text}\"\"\"
     """
+    
     response = client.models.generate_content(
-        model="gemini-1.5-flash", contents=prompt,
+        model="gemini-3.5-flash", 
+        contents=prompt,
         config=types.GenerateContentConfig(temperature=0.3)
     )
     return response.text
